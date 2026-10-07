@@ -14,7 +14,7 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 
 本插件把这四件事变成可以随时改、随时关、关了不留痕的东西，并给出一块常驻输入框的「压缩」面板。
 
-> 状态：`2.6.1`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
+> 状态：`2.6.2`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
 > 见「已知限制」。
 
 ---
@@ -240,7 +240,7 @@ for (const runtime of ctx.registry.values())
 ```bash
 git clone https://github.com/NoiraBaka/dsh-compact-suite.git
 cd dsh-compact-suite
-npm pack          # 得到 dsh-compact-suite-2.6.1.tgz
+npm pack          # 得到 dsh-compact-suite-2.6.2.tgz
 ```
 
 然后在 DSH 的「设置 → 插件 → 安装」里选这个 `.tgz`，或让 agent 用插件管理器指向该文件的绝对路径。
