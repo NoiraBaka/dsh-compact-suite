@@ -14,7 +14,7 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 
 本插件把这四件事变成可以随时改、随时关、关了不留痕的东西，并给出一块常驻输入框的「压缩」面板。
 
-> 状态：`2.5.0`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
+> 状态：`2.5.2`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
 > 见「已知限制」。
 
 ---
@@ -42,6 +42,13 @@ provider 再次回报用量之前仍带着压缩前的 surface 戳，会**塌向
 难看：它宣称整个上下文被清空，读者会以为还有大把余量，**方向是危险的**。
 本地 provider 报的 model 是这个权重文件的**绝对路径**（比整行还宽），面板只显示文件名，
 完整值留在 tooltip 里；`org/model` 这种 id 不做截断。
+
+**记录里的模型是真正跑那一次的那个**，不是引擎嘴上说的那个 —— 这一点值得解释，因为它曾经是错的。
+`dsh-compaction-basic` 在把请求交给 `ctx.llm.stream()` **之前**，就把自己解析出的 target 写进了
+`compaction/summary` 事件；而本插件是在那个 waterfall **内部**才改写的。所以事件里带的永远是**会话
+模型**：你选了 V4-Pro，记录却显示 Flash，而实际跑的确实是 V4-Pro。插件是唯一知道请求发给了谁的一方，
+因此自己记下改写结果；引擎的说法保留在 API 的 `engineModel` / `engineProvider` 字段里，两边不一致时
+可以直接对照，而不是留下一个看不见的矛盾。回填的历史记录不套用当前路由（那时它还不存在）。
 
 面板用宿主自己的菜单材质 token（`--dsw-menu-surface-fill` + `--dsw-menu-backdrop-filter`），
 跟随浅色/深色主题；`prefers-reduced-transparency` 与 `prefers-reduced-motion` 下自动退回不透明样式。
@@ -189,7 +196,7 @@ for (const runtime of ctx.registry.values())
 ```bash
 git clone https://github.com/NoiraBaka/dsh-compact-suite.git
 cd dsh-compact-suite
-npm pack          # 得到 dsh-compact-suite-2.5.0.tgz
+npm pack          # 得到 dsh-compact-suite-2.5.2.tgz
 ```
 
 然后在 DSH 的「设置 → 插件 → 安装」里选这个 `.tgz`，或让 agent 用插件管理器指向该文件的绝对路径。

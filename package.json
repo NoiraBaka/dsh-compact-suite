@@ -1,6 +1,6 @@
 {
   "name": "dsh-compact-suite",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "面向本地部署的 DSH 上下文压缩控制面：面板一键立即压缩、摘要改走指定模型（省掉本地卡的全长 prefill）、让触发阈值真正生效、引擎读数对齐卡片、暂停即完整还原。基线为 dsh-compaction-threshold 1.0.3（MIT）。",
   "license": "MIT",
   "author": "NoiraBaka",
