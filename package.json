@@ -1,0 +1,60 @@
+{
+  "name": "dsh-compact-suite",
+  "version": "2.2.1",
+  "description": "面向本地部署的 DSH 上下文压缩控制面：摘要改走指定模型（省掉本地卡的全长 prefill）、让触发阈值真正生效、引擎读数对齐卡片、暂停即完整还原。基线为 dsh-compaction-threshold 1.0.3（MIT）。",
+  "license": "MIT",
+  "author": "NoiraBaka",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NoiraBaka/dsh-compact-suite.git"
+  },
+  "homepage": "https://github.com/NoiraBaka/dsh-compact-suite#readme",
+  "bugs": {
+    "url": "https://github.com/NoiraBaka/dsh-compact-suite/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "compaction",
+    "context",
+    "threshold",
+    "summarization"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.0",
+    "react": "^18.2.0"
+  }
+}

@@ -1,0 +1,21 @@
+# dsh-compact-suite bundle patch
+#
+# 第一段：把 host 半挂到 profile 根层。浏览器半不需要在这里声明 ——
+# dsh-client-modules 会依 package.json 的 `dsh.client` + `exports["./client"]`
+# 自动编入。
+#
+# 第二段：默认配置。必须写在**顶层同 id 行**上，不能塞进 insert 块内 ——
+# insert 块内的行不可被 configEditor 唯一定位，设置页写入会被 compose 自检
+# 拒绝（dsh-onebot-qq 的实测结论）。顶层行属于 profile 根，可被设置页改写，
+# 因此下面这几个值都能在「设置 → 插件」里改。
+- insert:
+    - id: compact-suite
+      name: 'dsh-compact-suite'
+- id: compact-suite
+  config:
+    # 摘要改用云端账号模型：本地卡不再承担压缩那一次的全长 prefill。
+    # 两个键留空即回到「跟随会话模型」的旧行为。
+    summarizationProvider: deepseek-account
+    summarizationModel: deepseek-flash
+    # 触发比例；仅在滑块从未拖动过时作为初始值。
+    thresholdRatio: 0.8
