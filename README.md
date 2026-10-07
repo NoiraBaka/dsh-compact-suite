@@ -14,7 +14,7 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 
 本插件把这四件事变成可以随时改、随时关、关了不留痕的东西，并给出一块常驻输入框的「压缩」面板。
 
-> 状态：`2.3.0`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
+> 状态：`2.5.0`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
 > 见「已知限制」。
 
 ---
@@ -28,7 +28,7 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 | **接管压缩阈值** | 总开关。关掉即把所有被改过的引擎**还原成原样**，不用卸载插件 |
 | **摘要模型** | 「跟随会话模型」或指定 provider/model —— 压缩那一次调用改派到云端 |
 | **触发阈值** | 滑块 + `窗口 256K → 触发于 205K` 的换算。比例不是决策单位，token 才是 |
-| **状态行** | `已接管 N 个压缩引擎` / `未找到压缩引擎`（两种状态分开报） |
+| **状态行** | 如实分成五种：`已接管 N/M 个` / `只接管 N/M 个` / `找到 M 个但都没接受改写` / `已暂停：M 个已还原` / `未找到压缩引擎` |
 | **压缩记录** | 本会话每次压缩：时间、前后 token、省下多少、以及**这次摘要是哪个模型跑的**；打开时每 5 秒刷新，标题栏可折叠 |
 | **立即压缩** | 压缩记录标题栏右侧的按钮。不等阈值，马上压一次，结果就地回显 |
 
@@ -168,6 +168,10 @@ for (const runtime of ctx.registry.values())
   就被撤销（2.0.1 修复）。
 - **认领标记**：每次改写都会在 config 对象上写 `Symbol.for("dsh-compact-suite.owned")`。Symbol 对
   JSON / `for-in` 不可见，但第二个管理同一引擎的插件能辨认这是谁的写入，而不是互相无声覆盖。
+- **不认领自己还原不了的 config**：`headroomTokens` 过不了引擎自己的 schema（`assertNonNegativeInteger`
+  拒负数），所以**没有本插件标记却是负数**的 config，只可能是别人先写了哨兵值。这种情况下插件**跳过
+  那个引擎并告警**，而不是把它当「原值」捕获 —— 否则暂停时会把别人的毒值原样写回去。引擎此时的行为
+  本来就已经是我们要的，跳过不损失任何东西。
 - **状态文件带版本**：`{version, enabled, thresholdRatio, summarizationProvider, summarizationModel}`。
   读取时 v1 的裸 `{thresholdRatio}` 照常工作，并在首次装载时升级写回。
 
@@ -185,7 +189,7 @@ for (const runtime of ctx.registry.values())
 ```bash
 git clone https://github.com/NoiraBaka/dsh-compact-suite.git
 cd dsh-compact-suite
-npm pack          # 得到 dsh-compact-suite-2.3.0.tgz
+npm pack          # 得到 dsh-compact-suite-2.5.0.tgz
 ```
 
 然后在 DSH 的「设置 → 插件 → 安装」里选这个 `.tgz`，或让 agent 用插件管理器指向该文件的绝对路径。
@@ -253,9 +257,11 @@ npm pack          # 得到 dsh-compact-suite-2.3.0.tgz
 
 ### 兼容性
 
-**不要和 `dsh-compaction-threshold` 同时启用。** 两者都会改写同一批引擎实例上的 `config`。
-本插件保存原值，基线不保存，所以顺序不确定时可能把 `headroomTokens: -1e6` 当成「原值」记下来，
-之后暂停就还原不回去了。
+**仍然不建议和 `dsh-compaction-threshold` 同时启用，但两者共存时已经不会互相毒化。** 两者都会改写
+同一批引擎实例上的 `config`。基线的写入不带本插件的标记，所以插件能把它认出来：**凡是没有本插件标记
+却已经是负 headroom 的 config，一律跳过不接管**，因此不会把 `headroomTokens: -1e6` 当成「原值」记下来。
+代价是那批引擎不受本插件的滑块控制（它们此时的行为本来就已经是「让比例说了算」，所以没有实际损失），
+并且日志里会有一条一条的告警说明跳过了几个引擎。
 
 **不要和 `@dsh-plugin/dsh-auxiliary` 的压缩模型路由同时启用。** 两者都拦 `llm/stream` 并改写
 `purpose === 'compaction'` 的目标模型，同时开着以先注册者为准，结果不确定。
