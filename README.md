@@ -14,7 +14,7 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 
 本插件把这四件事变成可以随时改、随时关、关了不留痕的东西，并给出一块常驻输入框的「压缩」面板。
 
-> 状态：`2.5.2`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
+> 状态：`2.6.0`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
 > 见「已知限制」。
 
 ---
@@ -28,6 +28,7 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 | **接管压缩阈值** | 总开关。关掉即把所有被改过的引擎**还原成原样**，不用卸载插件 |
 | **摘要模型** | 「跟随会话模型」或指定 provider/model —— 压缩那一次调用改派到云端 |
 | **触发阈值** | 滑块 + `窗口 256K → 触发于 205K` 的换算。比例不是决策单位，token 才是 |
+| **保留与再触发** | 保留多少精确上下文（默认／比例／绝对值／压缩后目标），以及「长到多少就再压一次」 |
 | **状态行** | 如实分成五种：`已接管 N/M 个` / `只接管 N/M 个` / `找到 M 个但都没接受改写` / `已暂停：M 个已还原` / `未找到压缩引擎` |
 | **压缩记录** | 本会话每次压缩：时间、前后 token、省下多少、以及**这次摘要是哪个模型跑的**；打开时每 5 秒刷新，标题栏可折叠 |
 | **立即压缩** | 压缩记录标题栏右侧的按钮。不等阈值，马上压一次，结果就地回显 |
@@ -84,6 +85,49 @@ await ctx.commands.execute(agent, "/compact", [], signal);
 并发上，引擎自己会拒绝第二次压缩（报 `busy`），但那样双击的第二次请求要等上几分钟才被告知，
 所以插件在入口直接拒掉。`/state` 里带 `compacting` 字段：压缩比面板活得久，重开面板不会把一个
 正在跑的活儿显示成空闲。
+
+### 保留与再触发
+
+压完之后剩多少，由三样东西决定，而其中**只有一样能被设置**：
+
+```
+压缩后占用 = 压不动的头部（系统提示，引擎永不压缩它）+ 保留的精确上下文（可设）+ 摘要（~2-3K）
+```
+
+引擎的默认保留是**比例**：`retainTokens = floor((窗口 − 输出上限) × 0.16)`。比例是乘在窗口上的，
+所以窗口越大保留越多 —— 1M 窗口下 16% 就是十几万令牌。「压完还剩四五十 K，本地模型照样读很久」
+就是从这里来的。
+
+面板给三种表达方式（外加「默认」）：
+
+| 方式 | 写入的字段 | 说明 |
+| --- | --- | --- |
+| **比例** | `retainRatio` | 引擎原生。绝对值随窗口放大，1M 窗口下并不小 |
+| **绝对值** | `retainTokens` | 你真正想要的形状：`保留 5000 令牌` 就是 5000，和窗口无关 |
+| **压缩后目标** | 由目标反推 `retainTokens` | 减去**实测的头部**和摘要预留（3K），所以它不会承诺一个到不了的数 |
+
+面板同时如实报出**压不动的头部**（实测 surface 第 0 个节点的价格，前提是它是 `system/message`
+—— 那正是引擎 `selectCompactableRange` 把 `firstIdx` 钉在 1 的条件），以及 `压缩后下限 = 头部 + 保留`。
+
+**「增长」是第二个旋钮**：设成 N 之后，长到「上次压完 + N」就再压一次。引擎自己的触发点是窗口的一个
+分数，1M 窗口下即使滑块拖到底也压不到 200K 以下，而增长模式表达的是「别让它比上次大出 N 去」。
+
+> ⚠️ 两个旋钮是**耦合**的：按比例保留时，触发点永远不能低于保留量（引擎会抛
+> `TargetPressureConfigError`，而且是每次判定都抛，自动压缩就此静默失效、只警告一次）。
+> 所以 1M 窗口 + 比例保留 16% 时，增长模式够不到 200K 以下 —— 面板会直接告诉你
+> 「增长模式被保留量卡住了」，并指出把保留改成绝对值就能压得更小。
+>
+> 阈值被保留量顶上去时也会单独告警：**阈值不能低于保留量**，这条线不会静默越过去。
+
+### 每次压缩是谁触发的
+
+`compaction/start` 事件里三个入口长得一模一样（手动传 `turn: null`，压力与溢出恢复都带回合号），
+所以插件监听引擎自己用来重试的那个信号 —— `agent/request-error` 且
+`failure.code === "CONTEXT_WINDOW_EXCEEDED"` —— 把触发原因如实标进记录：`压力` / `溢出` / `手动`。
+
+**`溢出` 值得特别看**：它意味着 provider 拒了这次请求，也就是那个路由配置的窗口**大于那个端点实际
+接受的量**。如果你的压缩全是「溢出」，那阈值和增长两个旋钮都还没轮到生效，该先修的是路由的
+`contextWindow`。
 
 ---
 
@@ -196,7 +240,7 @@ for (const runtime of ctx.registry.values())
 ```bash
 git clone https://github.com/NoiraBaka/dsh-compact-suite.git
 cd dsh-compact-suite
-npm pack          # 得到 dsh-compact-suite-2.5.2.tgz
+npm pack          # 得到 dsh-compact-suite-2.6.0.tgz
 ```
 
 然后在 DSH 的「设置 → 插件 → 安装」里选这个 `.tgz`，或让 agent 用插件管理器指向该文件的绝对路径。
@@ -236,7 +280,7 @@ npm pack          # 得到 dsh-compact-suite-2.5.2.tgz
 | 路由 | 说明 |
 | --- | --- |
 | `GET /compact-suite/api/state?session=<id>` | 阈值、开关、路由、provider 列表、`contextWindow`、`thresholdTokens`、`ratioIsBinding`、引擎数、`ownedEngines`（真正带标记的引擎数）、实际 `headroomTokens` |
-| `POST /compact-suite/api/state` | `{thresholdRatio?, summarizationProvider?, summarizationModel?, enabled?}` |
+| `POST /compact-suite/api/state` | `{thresholdRatio?, summarizationProvider?, summarizationModel?, enabled?, retainRatio?, retainTokens?, growthTokens?}`。`retainRatio` 与 `retainTokens` 互斥，`null` 表示回到引擎默认 |
 | `GET /compact-suite/api/log?session=<id>` | 压缩记录，新的在前，每条带 `provider` / `model` |
 | `POST /compact-suite/api/compact?session=<id>` | 立即压缩：跑本 composition 的 `/compact`，返回 `{commandId, kind, text}` |
 | `GET /compact-suite/api/models?provider=<p>` | `ctx.llm.listModels(provider)` |
@@ -299,6 +343,11 @@ npm pack          # 得到 dsh-compact-suite-2.5.2.tgz
   上游改了这个函数就得跟着改。
   面板以 `outputRescue` 字段如实报告其状态。
 - 面板里的 `窗口 → 触发点` 需要本会话已产生过一次请求（`request/context`）；此前显示「还未知」。
+- **增长模式是进程级策略**：引擎的 config 是整个 preset 一份，不区分会话，而增长基线按会话记录，
+  取的是**最近被驱动的那一个**。同时驱动多个会话时它会跟着最后一个走。单会话使用（本插件的目标场景）
+  没有这个歧义。
+- **压不动的头部只能实测、不能设**：它来自 `measure()` 的节点价格，需要先有一条消息走过。
+  在此之前面板显示「还未知」，而不是填一个 0 假装量过。
 - **「立即压缩」要求 agent 空闲**：正在跑一轮、或已有一次压缩在进行时，官方命令会报
   `busy`，面板原样转述。压缩本身不能在回合中途插进去。
 - 只在 **DSH `0.2.0-rc.2` + Windows** 上实机验证过。其他版本/平台没测。
