@@ -14,7 +14,7 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 
 本插件把这四件事变成可以随时改、随时关、关了不留痕的东西，并给出一块常驻输入框的「压缩」面板。
 
-> 状态：`2.6.0`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
+> 状态：`2.6.1`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
 > 见「已知限制」。
 
 ---
@@ -240,7 +240,7 @@ for (const runtime of ctx.registry.values())
 ```bash
 git clone https://github.com/NoiraBaka/dsh-compact-suite.git
 cd dsh-compact-suite
-npm pack          # 得到 dsh-compact-suite-2.6.0.tgz
+npm pack          # 得到 dsh-compact-suite-2.6.1.tgz
 ```
 
 然后在 DSH 的「设置 → 插件 → 安装」里选这个 `.tgz`，或让 agent 用插件管理器指向该文件的绝对路径。
@@ -343,6 +343,8 @@ npm pack          # 得到 dsh-compact-suite-2.6.0.tgz
   上游改了这个函数就得跟着改。
   面板以 `outputRescue` 字段如实报告其状态。
 - 面板里的 `窗口 → 触发点` 需要本会话已产生过一次请求（`request/context`）；此前显示「还未知」。
+- **增长模式需要一条基线**：它来自**落盘日志里该会话最新一条已结算的压缩**，重启后立即可用；
+  全新会话（日志里还没有压缩记录）要等第一次压缩之后才有基线，面板会如实说「现在还没生效」。
 - **增长模式是进程级策略**：引擎的 config 是整个 preset 一份，不区分会话，而增长基线按会话记录，
   取的是**最近被驱动的那一个**。同时驱动多个会话时它会跟着最后一个走。单会话使用（本插件的目标场景）
   没有这个歧义。
