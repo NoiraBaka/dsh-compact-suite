@@ -14,7 +14,7 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 
 本插件把这四件事变成可以随时改、随时关、关了不留痕的东西，并给出一块常驻输入框的「压缩」面板。
 
-> 状态：`2.2.1`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
+> 状态：`2.3.0`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
 > 见「已知限制」。
 
 ---
@@ -29,10 +29,50 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 | **摘要模型** | 「跟随会话模型」或指定 provider/model —— 压缩那一次调用改派到云端 |
 | **触发阈值** | 滑块 + `窗口 256K → 触发于 205K` 的换算。比例不是决策单位，token 才是 |
 | **状态行** | `已接管 N 个压缩引擎` / `未找到压缩引擎`（两种状态分开报） |
-| **压缩记录** | 本会话每次压缩：时间、前后 token、省下多少、以及**这次摘要是哪个模型跑的**；打开时每 5 秒刷新 |
+| **压缩记录** | 本会话每次压缩：时间、前后 token、省下多少、以及**这次摘要是哪个模型跑的**；打开时每 5 秒刷新，标题栏可折叠 |
+| **立即压缩** | 压缩记录标题栏右侧的按钮。不等阈值，马上压一次，结果就地回显 |
+
+时间戳按本机时区显示成 `MM-DD HH:MM`（记录本身是 UTC ISO 串，原样打出来会占掉整行），
+并且整格不可收缩 —— 否则模型名一长，`10-07 21:06` 会从中间的空格断开成两行。
+**失败的压缩单独成行**：`compaction/end` 带 `error` 的记录不是「省下 0 令牌」，
+而是一次没有完成的压缩，面板把它标红并原样转出错误文本，而不是让它混在成功的记录里。
+本地 provider 报的 model 是这个权重文件的**绝对路径**（比整行还宽），面板只显示文件名，
+完整值留在 tooltip 里；`org/model` 这种 id 不做截断。
 
 面板用宿主自己的菜单材质 token（`--dsw-menu-surface-fill` + `--dsw-menu-backdrop-filter`），
 跟随浅色/深色主题；`prefers-reduced-transparency` 与 `prefers-reduced-motion` 下自动退回不透明样式。
+
+### 立即压缩怎么实现的
+
+按钮把请求交给**本 composition 自己的 `/compact` 命令**，而不是直接去够 `compaction.compactNow`：
+
+```js
+const agent = ctx.agents.get(sessionId);            // 会话 → agent
+await ctx.commands.execute(agent, "/compact", [], signal);
+```
+
+三个理由：
+
+1. `compaction` 缝被 `isolate` 在 agent preset 组内，**根层 `ctx.get("compaction")` 解析不到实例**；
+   而 `commands` 不在 isolate 名单里，并且按 agent 解析命令（`find(agent, name)`），正好看得见组里
+   注册的那个 `/compact`。
+2. `dsh-command-compact` 已经把每种预期失败（`busy` / `cancelled` / `changed` / `summary` /
+   `commit` / `persistence`）归并成一句人话，也把「没有可压缩历史」单独报出来 —— 重复实现一遍只会
+   和官方说法漂移。
+3. 这次调用会作为 `command/run` + `command/done` 写进会话日志，所以**按按钮和手打 `/compact`
+   在记录里一样可追溯**。
+
+按钮顺带把官方只做了一半的事补齐：`/compact` 的结果文案只有英文，面板按它**四种已知形态**
+本地化 —— 两种成功（`No compactable history yet.` / `Compacted N history items (~M tokens).`）
+和两种最常撞到的失败（`busy`、`cancelled`）。其余一律原样透出，所以上游改措辞只会退化成英文，
+不会变成一句自信的错译。
+
+`busy` 值得单独说：按钮的禁用状态只知道「有没有压缩在跑」，不知道 agent 是否正在回合中，
+所以**一轮还没跑完时点按钮就会撞到它**，这是最常见的失败。
+
+并发上，引擎自己会拒绝第二次压缩（报 `busy`），但那样双击的第二次请求要等上几分钟才被告知，
+所以插件在入口直接拒掉。`/state` 里带 `compacting` 字段：压缩比面板活得久，重开面板不会把一个
+正在跑的活儿显示成空闲。
 
 ---
 
@@ -141,7 +181,7 @@ for (const runtime of ctx.registry.values())
 ```bash
 git clone https://github.com/NoiraBaka/dsh-compact-suite.git
 cd dsh-compact-suite
-npm pack          # 得到 dsh-compact-suite-2.2.1.tgz
+npm pack          # 得到 dsh-compact-suite-2.3.0.tgz
 ```
 
 然后在 DSH 的「设置 → 插件 → 安装」里选这个 `.tgz`，或让 agent 用插件管理器指向该文件的绝对路径。
@@ -183,6 +223,7 @@ npm pack          # 得到 dsh-compact-suite-2.2.1.tgz
 | `GET /compact-suite/api/state?session=<id>` | 阈值、开关、路由、provider 列表、`contextWindow`、`thresholdTokens`、`ratioIsBinding`、引擎数、`ownedEngines`（真正带标记的引擎数）、实际 `headroomTokens` |
 | `POST /compact-suite/api/state` | `{thresholdRatio?, summarizationProvider?, summarizationModel?, enabled?}` |
 | `GET /compact-suite/api/log?session=<id>` | 压缩记录，新的在前，每条带 `provider` / `model` |
+| `POST /compact-suite/api/compact?session=<id>` | 立即压缩：跑本 composition 的 `/compact`，返回 `{commandId, kind, text}` |
 | `GET /compact-suite/api/models?provider=<p>` | `ctx.llm.listModels(provider)` |
 
 ---
@@ -240,6 +281,8 @@ npm pack          # 得到 dsh-compact-suite-2.2.1.tgz
   这段逻辑针对的是 `dsh-llm-pi-ai` 的 `clampMaxTokensToContext`，上游改了这个函数就得跟着改。
   面板以 `outputRescue` 字段如实报告其状态。
 - 面板里的 `窗口 → 触发点` 需要本会话已产生过一次请求（`request/context`）；此前显示「还未知」。
+- **「立即压缩」要求 agent 空闲**：正在跑一轮、或已有一次压缩在进行时，官方命令会报
+  `busy`，面板原样转述。压缩本身不能在回合中途插进去。
 - 只在 **DSH `0.2.0-rc.2` + Windows** 上实机验证过。其他版本/平台没测。
 
 ---
