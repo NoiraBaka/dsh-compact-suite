@@ -288,7 +288,8 @@ npm pack          # 得到 dsh-compact-suite-2.5.0.tgz
   （压缩仍可用，回落会话模型）。
 - **输出兜底是启发式的**：它拦 `max_completion_tokens` 小于等于 16384 的请求，把上限抬回压缩器的
   实际值。已知会误伤 `session-title-llm` 的 64 —— 无害，`max_completion_tokens` 是上限而非配额。
-  这段逻辑针对的是 `dsh-llm-pi-ai` 的 `clampMaxTokensToContext`，上游改了这个函数就得跟着改。
+  这段逻辑针对的是 `@earendil-works/pi-ai` 的 `clampMaxTokensToContext`（`dist/api/simple-options.js`），
+  上游改了这个函数就得跟着改。
   面板以 `outputRescue` 字段如实报告其状态。
 - 面板里的 `窗口 → 触发点` 需要本会话已产生过一次请求（`request/context`）；此前显示「还未知」。
 - **「立即压缩」要求 agent 空闲**：正在跑一轮、或已有一次压缩在进行时，官方命令会报
