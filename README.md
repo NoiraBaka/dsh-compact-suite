@@ -14,7 +14,7 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 
 本插件把这四件事变成可以随时改、随时关、关了不留痕的东西，并给出一块常驻输入框的「压缩」面板。
 
-> 状态：`2.8.1`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
+> 状态：`2.8.2`，在 DSH `0.2.0-rc.2`（desktop / Windows）上实机验证。接管依赖上游内部结构，
 > 见「已知限制」。
 
 ---
@@ -39,10 +39,17 @@ DSH 自带的自动压缩，把「什么时候压、用哪个模型压、按什�
 「失败 · …」又落在另一个位置；现在换个数位也不会动。
 **失败的压缩单独成行**：`compaction/end` 带 `error` 的记录不是「省下 0 令牌」，
 而是一次没有完成的压缩，面板把它标红并原样转出错误文本，而不是让它混在成功的记录里。
-**`after` 未知时显示 `—`**：`TokenMeter` 被包装成回报卡片的 `contextPressure`，而这个投影在
-provider 再次回报用量之前仍带着压缩前的 surface 戳，会**塌向零**。刚压完 318K 的会话不可能是空的，
-所以 `318K → 0` 不是读数而是这个塌陷——它在落盘前就被丢掉，读取旧记录时也一并修正。留着它不只是
-难看：它宣称整个上下文被清空，读者会以为还有大把余量，**方向是危险的**。
+**`after` 未知时显示 `—`，而且刚压完的那一行就是未知**：`TokenMeter` 被包装成回报卡片的
+`contextPressure`，而这个投影在 provider 再次回报用量之前仍带着压缩前的 surface 戳，会**塌向零**。
+刚压完 318K 的会话不可能是空的，所以 `318K → 0` 不是读数而是这个塌陷。
+塌陷**不只是零**：2026-10-08 一次 514K 的手动压缩，`compaction/end` 那一刻读到的
+`contextPressure` 是 `142300`，面板照实记成 `514K → 142K  −371K`——三个数字都自洽，看起来
+完全可信，而那个会话真正的结清值是 **24K**（`16000` 保留量 + 头部 + 摘要）。记录后来被下一个
+用量采样改对了，但**当时屏幕上那个数字是假的**，而且没有任何东西提示它不可信。
+所以现在 `compaction/end` **不写任何 `after`**，`settleQueued` 是唯一写它的地方：只有当 provider
+又报了一次用量之后，记录才会被填上，面板在填上之前显示 `—`。
+「不知道」比一个像模像样的错数字好，尤其在这个方向上——`−371K` 会让人以为还剩很多余量。
+落盘的记录同样不带这个中间值，所以重启不会把假数字读回来；旧版本已经写下的塌陷值仍在读盘时被修正。
 本地 provider 报的 model 是这个权重文件的**绝对路径**（比整行还宽），面板只显示文件名，
 完整值留在 tooltip 里；`org/model` 这种 id 不做截断。
 
@@ -322,13 +329,13 @@ for (const runtime of ctx.registry.values())
 ```bash
 git clone https://github.com/NoiraBaka/dsh-compact-suite.git
 cd dsh-compact-suite
-npm test          # 两套回归夹具：面板渲染 + 宿主策略下限
-npm pack          # 得到 dsh-compact-suite-2.8.1.tgz
+npm test          # 三套回归夹具：面板渲染 + 宿主策略下限 + 压缩记录的 after
+npm pack          # 得到 dsh-compact-suite-2.8.2.tgz
 ```
 
-`npm test` 跑两个夹具：
+`npm test` 跑三个夹具：
 
-- `test/render-panel.mjs` —— 面板半边。8 个渲染场景 + 66 个回调 + 滑块实时重算。挡的是两类在浏览器里
+- `test/render-panel.mjs` —— 面板半边。9 个渲染场景 + 90 个回调 + 滑块实时重算。挡的是两类在浏览器里
   都表现成「整个芯片凭空消失」的错误：渲染期抛错（槽位机制会把注册项永久退役，页面不刷新回不来）
   和事件回调抛错。还钉住两条产品约束：自动模式下滑块必须可拖，拖动时面板数字必须立刻重算。
 - `test/host-policy.mjs` —— 宿主半边。它不复制逻辑，而是从 `lib/index.js` 里按名字抽出
@@ -339,6 +346,12 @@ npm pack          # 得到 dsh-compact-suite-2.8.1.tgz
 
   它可以指向任意版本的 `lib/index.js`：`node test/host-policy.mjs lib/index.js.bak-before-review2`。
   拿修复前的文件跑会红 7 项，这就是它存在的意义。
+- `test/log-after.mjs` —— 压缩记录的 `after` 到底从哪来。同样抽真代码（`recordSessionEvent` /
+  `settleQueued` / `backfillSession` / `logEntry`），配一个假的 `TokenMeter`，按真实顺序喂
+  `compaction/start → summary → end → assistant/message`；日志真的写进临时 `$DSH_HOME`，所以
+  「接口发给面板的那一行」和「磁盘上的那一行」都会被断言。挡的是 2026-10-08 那次
+  `514K → 142K  −371K`：`compaction/end` 那一刻读到的投影看着完全可信，而真实结清值是 24K。
+  也可以指向旧文件：`node test/log-after.mjs <旧 lib/index.js>`，会红 8 项。
 
 
 然后在 DSH 的「设置 → 插件 → 安装」里选这个 `.tgz`，或让 agent 用插件管理器指向该文件的绝对路径。

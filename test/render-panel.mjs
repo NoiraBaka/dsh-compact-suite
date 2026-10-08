@@ -597,7 +597,11 @@ try {
 	const ROWS = [
 		{ at: "2026-10-07T15:30:50.000Z", trigger: "pressure", beforeTokens: 222261, afterTokens: 28577, savedTokens: 193684, model: "deepseek-flash" },
 		{ at: "2026-10-07T15:27:03.000Z", trigger: "pressure", beforeTokens: 188382, afterTokens: 194302, savedTokens: null, error: "DeepSeek Messages request aborted" },
-		{ at: "2026-10-07T15:12:03.000Z", trigger: "context-overflow", beforeTokens: 89503, afterTokens: 42704, savedTokens: 46799, model: "D:\\llama-b10692-bin\\Swift-1.5-Qwen3.8-27B.gguf" }
+		{ at: "2026-10-07T15:12:03.000Z", trigger: "context-overflow", beforeTokens: 89503, afterTokens: 42704, savedTokens: 46799, model: "D:\\llama-b10692-bin\\Swift-1.5-Qwen3.8-27B.gguf" },
+		// 刚落地的压缩：宿主还没拿到下一个用量采样，所以 `after` 是 null。这里必须显示
+		// 破折号而不是任何数字 —— 这条路径以前会显示一个「142K / −371K」，看起来完全
+		// 可信，而会话其实结清在 24K。
+		{ at: "2026-10-08T07:26:26.000Z", trigger: "manual", beforeTokens: 513692, afterTokens: null, savedTokens: null, model: "deepseek-flash" }
 	];
 	const LOG_STATE = {
 		...BASE, auto: false, autoPolicy: null, autoParams: AUTO_PARAMS,
@@ -625,19 +629,21 @@ try {
 	const openTree = Panel({ t, sessionId: "session-x" });
 	const openText = render(openTree);
 	const showed = openText.includes("222K") && openText.includes("29K") && openText.includes("aborted");
-	console.log("  " + (showed ? "✅" : "❌") + " 展开后三行都在（含失败那行）");
+	console.log("  " + (showed ? "✅" : "❌") + " 展开后四行都在（含失败那行与未结清那行）");
 	if (!showed) bad++;
 
 	// 成功行必须用同一套固定列；列数一样才谈得上对齐。
 	const cols = [];
+	const valNodes = [];
 	let failed = null;
 	walk(openTree, (node) => {
 		const cls = node.props?.className;
 		if (cls === "dcs-val-fail") failed = node;
 		if (cls !== "dcs-val") return;
+		valNodes.push(node);
 		cols.push((node.children ?? []).map((c) => (c !== null && typeof c === "object" ? c.props?.className : c)).join("|"));
 	});
-	const uniform = cols.length === 2
+	const uniform = cols.length === 3
 		&& cols.every((c) => c === cols[0] && c.includes("dcs-num-before") && c.includes("dcs-saved") && c.includes("dcs-model"));
 	console.log("  " + (uniform ? "✅" : "❌") + " 成功行都用同一套固定列：" + (cols.join(" ／ ") || "(一个都没有)"));
 	if (!uniform) bad++;
@@ -646,6 +652,18 @@ try {
 	const failTidy = failed !== null && failed.props.title === ROWS[1].error;
 	console.log("  " + (failTidy ? "✅" : "❌") + " 失败行不带数字列，原因留在 title 上");
 	if (!failTidy) bad++;
+
+	// 还没结清的行：破折号，且不许出现节省量。夹具把整行拆到单元格级别来断言，
+	// 因为「显示成一个数字」正是要防的那件事。元素节点的形状是 `{type, props, children}`，
+	// 文字挂在 `node.children` 上，不在 `props.children` 里。
+	const cell = (node) => (Array.isArray(node?.children) ? node.children.join("") : null);
+	const pending = valNodes.find((node) => cell(node.children?.[0]) === "514K");
+	const pendingOk = pending !== undefined
+		&& cell(pending.children?.[2]) === "—"
+		&& cell(pending.children?.[3]) === "";
+	console.log("  " + (pendingOk ? "✅" : "❌") + " 未结清的 after 显示破折号，且没有节省量："
+		+ (pending === undefined ? "(整行都没渲染)" : `→ ${JSON.stringify(cell(pending.children?.[2]))}`));
+	if (!pendingOk) bad++;
 } catch (e) {
 	bad++;
 	console.log("  ❌ " + e.constructor.name + ": " + e.message);
