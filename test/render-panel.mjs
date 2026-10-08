@@ -643,10 +643,20 @@ try {
 		valNodes.push(node);
 		cols.push((node.children ?? []).map((c) => (c !== null && typeof c === "object" ? c.props?.className : c)).join("|"));
 	});
+	// `dcs-pending` 不是第六列，只是「这个数还没量出来」的弱色标记，比对列结构时先摘掉。
+	const grid = (c) => c.replace(" dcs-pending", "");
 	const uniform = cols.length === 3
-		&& cols.every((c) => c === cols[0] && c.includes("dcs-num-before") && c.includes("dcs-saved") && c.includes("dcs-model"));
+		&& cols.every((c) => grid(c) === grid(cols[0]) && c.includes("dcs-num-before") && c.includes("dcs-saved") && c.includes("dcs-model"));
 	console.log("  " + (uniform ? "✅" : "❌") + " 成功行都用同一套固定列：" + (cols.join(" ／ ") || "(一个都没有)"));
 	if (!uniform) bad++;
+
+	// 只有未结清的那一行带 `dcs-pending`。标记一旦和 `after == null` 脱钩，弱色就会
+	// 落到真实数字上（把结清的行画成没结清），或者反过来没有提示。
+	const marked = cols.map((c, i) => (c.includes("dcs-pending") ? i : -1)).filter((i) => i >= 0);
+	const markOk = marked.length === 1 && marked[0] === 2;
+	console.log("  " + (markOk ? "✅" : "❌") + " 只有未结清那一行带「计算中」弱色标记：" + JSON.stringify(marked)
+		+ "（行序 0=已结清 1=已结清 2=未结清）");
+	if (!markOk) bad++;
 
 	// 失败行不套数字列，但原文必须留着 —— 它是「这次为什么没压成」的唯一线索。
 	const failTidy = failed !== null && failed.props.title === ROWS[1].error;
@@ -658,12 +668,32 @@ try {
 	// 文字挂在 `node.children` 上，不在 `props.children` 里。
 	const cell = (node) => (Array.isArray(node?.children) ? node.children.join("") : null);
 	const pending = valNodes.find((node) => cell(node.children?.[0]) === "514K");
+	// 破折号本身还不够：`—` 在数字位上既像 0 又像出错，所以这一刻的承诺是
+	// 「弱色的 `—` + 节省量那格写明白待回填」，且整行不出现任何节省量数字。
+	const savedCell = pending?.children?.[3];
 	const pendingOk = pending !== undefined
 		&& cell(pending.children?.[2]) === "—"
-		&& cell(pending.children?.[3]) === "";
-	console.log("  " + (pendingOk ? "✅" : "❌") + " 未结清的 after 显示破折号，且没有节省量："
+		&& pending.children?.[2]?.props?.className === "dcs-num dcs-pending"
+		&& pending.children?.[2]?.props?.title === t("logPendingTitle")
+		&& savedCell?.props?.className === "dcs-saved"
+		&& cell(savedCell.children?.[0]) === t("logPendingCell");
+	console.log("  " + (pendingOk ? "✅" : "❌") + " 未结清的 after 显示弱色破折号 + 「计算中」，且没有节省量："
 		+ (pending === undefined ? "(整行都没渲染)" : `→ ${JSON.stringify(cell(pending.children?.[2]))}`));
 	if (!pendingOk) bad++;
+
+	// 提示行：有未结清的行才出现，并且带着条数；全都结清时不许留一句废话。
+	const hintOk = openText.includes(t("logPending", { count: 1 }));
+	console.log("  " + (hintOk ? "✅" : "❌") + " 有未结清行时，列表上方给出一行说明和条数："
+		+ t("logPending", { count: 1 }));
+	if (!hintOk) bad++;
+
+	const settled = ROWS.filter((r) => r.afterTokens != null);
+	const h2 = []; h2[HOOK.state] = LOG_STATE; h2[HOOK.log] = settled; h2[HOOK.logOpen] = true;
+	hookStates = h2; hookIndex = 0;
+	const settledText = render(Panel({ t, sessionId: "session-x" }));
+	const quiet = !settledText.includes("logPending");
+	console.log("  " + (quiet ? "✅" : "❌") + " 全部都结清时不出现这一行提示");
+	if (!quiet) bad++;
 } catch (e) {
 	bad++;
 	console.log("  ❌ " + e.constructor.name + ": " + e.message);
