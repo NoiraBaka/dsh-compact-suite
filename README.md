@@ -16,14 +16,30 @@ DSH 的上下文快满时，会自动把旧对话压成一小段摘要来腾地�
 
 ## 安装
 
+不用 git，不用 npm，两步。
+
+**第 1 步：下载安装包**
+
+点下面的链接，浏览器会把它存到你的下载文件夹：
+
+[dsh-compact-suite-2.8.5.tgz](https://github.com/NoiraBaka/dsh-compact-suite/releases/download/v2.8.5/dsh-compact-suite-2.8.5.tgz)
+
+**第 2 步：装进 DSH**
+
+打开 DSH 的 **设置 → 插件 → 安装**，选中刚才下载的那个 `.tgz` 文件。
+装完按 DSH 的提示刷新或重启一次。
+
+以后要更新，去 [Releases 页面](https://github.com/NoiraBaka/dsh-compact-suite/releases) 下载最新那个 `.tgz`，装法一样。
+
+## 从源码安装（开发者）
+
 ```bash
 git clone https://github.com/NoiraBaka/dsh-compact-suite.git
 cd dsh-compact-suite
-npm pack      # 生成 dsh-compact-suite-2.8.4.tgz
+npm pack
 ```
 
-然后在 DSH 里打开 **设置 → 插件 → 安装**，选刚才生成的 `.tgz`。
-装完按 DSH 的提示刷新或重启一次。
+然后用上面第 2 步同样的方式装生成的 `.tgz`。
 
 ## 面板在哪
 
