@@ -22,7 +22,7 @@ DSH 的上下文快满时，会自动把旧对话压成一小段摘要来腾地�
 
 点下面的链接，浏览器会把它存到你的下载文件夹：
 
-[dsh-compact-suite-2.8.6.tgz](https://github.com/NoiraBaka/dsh-compact-suite/releases/download/v2.8.6/dsh-compact-suite-2.8.6.tgz)
+[dsh-compact-suite-2.8.7.tgz](https://github.com/NoiraBaka/dsh-compact-suite/releases/download/v2.8.7/dsh-compact-suite-2.8.7.tgz)
 
 **第 2 步：装进 DSH**
 

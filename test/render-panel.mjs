@@ -600,8 +600,9 @@ try {
 		{ at: "2026-10-07T15:12:03.000Z", trigger: "context-overflow", beforeTokens: 89503, afterTokens: 42704, savedTokens: 46799, model: "D:\\llama-b10692-bin\\Swift-1.5-Qwen3.8-27B.gguf" },
 		// 刚落地的压缩：宿主还没拿到下一个用量采样，所以 `after` 是 null。这里必须显示
 		// 破折号而不是任何数字 —— 这条路径以前会显示一个「142K / −371K」，看起来完全
-		// 可信，而会话其实结清在 24K。
-		{ at: "2026-10-08T07:26:26.000Z", trigger: "manual", beforeTokens: 513692, afterTokens: null, savedTokens: null, model: "deepseek-flash" }
+		// 可信，而会话其实结清在 24K。时间戳必须是真的「刚刚」：超过结算窗口的行走的是
+		// 另一条分支（见下面的陈旧行断言）。
+		{ at: new Date(Date.now() - 60 * 1000).toISOString(), trigger: "manual", beforeTokens: 513692, afterTokens: null, savedTokens: null, model: "deepseek-flash" }
 	];
 	const LOG_STATE = {
 		...BASE, auto: false, autoPolicy: null, autoParams: AUTO_PARAMS,
@@ -694,6 +695,23 @@ try {
 	const quiet = !settledText.includes("logPending");
 	console.log("  " + (quiet ? "✅" : "❌") + " 全部都结清时不出现这一行提示");
 	if (!quiet) bad++;
+
+	// 陈旧行：宿主的待结算队列是内存里的 WeakMap，进程重启或会话对象被重建就没了，
+	// 那条记录的 `after` 再也不会来。此时还说「下一条消息发出后自动补上」是假话，
+	// 而且它不该被算进待结算条数里 —— 否则面板会永远宣称有事情在进行中。
+	const staleRow = { ...ROWS[3], at: new Date(Date.now() - 60 * 60 * 1000).toISOString() };
+	const h4 = [];
+	h4[HOOK.state] = LOG_STATE;
+	h4[HOOK.log] = [...ROWS.slice(0, 3), staleRow];
+	h4[HOOK.logOpen] = true;
+	hookStates = h4; hookIndex = 0;
+	const staleText = render(Panel({ t, sessionId: "session-x" }));
+	const staleOk = staleText.includes(t("logStaleCell"))
+		&& !staleText.includes(t("logPendingCell"))
+		&& !staleText.includes(t("logPending", { count: 1 }));
+	console.log("  " + (staleOk ? "✅" : "❌") + " 死掉的未结清行改口「" + t("logStaleCell")
+		+ "」，并且不再算进待结算条数");
+	if (!staleOk) bad++;
 } catch (e) {
 	bad++;
 	console.log("  ❌ " + e.constructor.name + ": " + e.message);
