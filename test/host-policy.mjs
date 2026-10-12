@@ -88,7 +88,10 @@ const STATE = [
 	"headTokensById",
 	"lastAfterById",
 	"manualCompactions",
-	"outputRescueActive"
+	"outputRescueActive",
+	// 布防状态。`currentThresholdRatio` 现在会读它，所以夹具必须把它一起抽进来 ——
+	// 抽了函数不抽它，等于在断言一份跑不起来的实现。
+	"armed"
 ];
 const FUNCTIONS = [
 	"autoPolicy",
@@ -156,7 +159,9 @@ return {
 		resolvedRetainRatio,
 		resolvedRetainTokens,
 		resolvedGrowthTokens
-	})
+	}),
+	/** 布防是瞬态模块状态，夹具直接摆布它，不用去碰计时器和引擎。 */
+	setArmed: (value) => { armed = value; }
 };
 `;
 
@@ -527,6 +532,58 @@ section("触发点是滑块 / 下限决定的");
 	check(bigWindow.thresholdTokens > 1000000 && bigWindow.ratioIsBinding === true,
 		"4M 窗口下阈值超过 100 万，比值臂仍然胜出（旧判据会在这里误报）",
 		`阈值 ${bigWindow.thresholdTokens} binding=${bigWindow.ratioIsBinding}`);
+}
+
+// ── 布防：把阈值压到下限，让自动那条路上场 ────────────────────────────────
+//
+// 引擎的手动入口把保留预算写死成 0，所以「守保留量的压缩」只能由自动路径做，而
+// 自动路径只在 `agent/pre-step` 上跑。布防做的事就是把这个阈值临时降到下限，
+// 让下一次 step 必然越过它。这里钉住的是一条**安全**性质，不是便利性质：
+// 布防后的阈值必须仍然严格高于保留量 —— 否则 `resolveCompactSpec` 会抛
+// `retainTokens (...) must be less than threshold tokens`，自动监听器吞掉它、
+// 每个目标只警告一次，然后什么都不压。那种"按钮没反应"是最难查的失败。
+section("布防 · 阈值必须仍然高过保留量");
+{
+	// 摆**存储**值而不是 resolved 值：`currentThresholdRatio` 会先 `resolvePolicy`，
+	// 直接写 resolved 变量的下场是被它覆盖回去（夹具第一次跑就是 0.05 而不是 0.31）。
+	const STORED = { currentRetainRatio: 0.3, currentRetainTokens: null, currentAuto: false };
+	scope.load({ engines: NO_ENGINE, heads: {}, ...STORED, currentRatio: 0.8, windows: { R: 1000000 }, lasts: {} });
+
+	const before = scope.currentThresholdRatio(ctx, "R");
+	check(Math.abs(before - 0.8) < 1e-9, "布防前阈值就是用户那个 0.8", `实际 ${before}`);
+
+	const floor = scope.ratioFloor(ctx, "R");
+	scope.setArmed({ armedRatio: floor });
+	const during = scope.currentThresholdRatio(ctx, "R");
+	check(Math.abs(during - 0.31) < 1e-9, "布防后阈值落到下限 0.31", `实际 ${during}`);
+
+	// 同一把尺子：窗口 × 比例 vs 保留量。引擎在解析后的令牌数上比，这里比比例。
+	const retained = Math.floor(1000000 * 0.3);
+	const threshold = engineThreshold(during, 1000000);
+	check(threshold > retained, "布防后的阈值严格大于保留量（引擎不会抛配置错）",
+		`阈值 ${threshold} vs 保留 ${retained}`);
+
+	scope.setArmed(null);
+	const after = scope.currentThresholdRatio(ctx, "R");
+	check(Math.abs(after - 0.8) < 1e-9, "解除布防后回到用户那个 0.8", `实际 ${after}`);
+}
+
+// 绝对值保留：下限来自 `(retainTokens + 余量) / 窗口`，也必须高过它。
+section("布防 · 绝对值保留同样安全");
+{
+	scope.load({
+		engines: NO_ENGINE, heads: {},
+		currentRetainRatio: null, currentRetainTokens: 200000, currentAuto: false,
+		currentRatio: 0.8, windows: { R: 1000000 }, lasts: {}
+	});
+
+	const floor = scope.ratioFloor(ctx, "R");
+	scope.setArmed({ armedRatio: floor });
+	const during = scope.currentThresholdRatio(ctx, "R");
+	check(engineThreshold(during, 1000000) > 200000,
+		"20 万绝对值保留下，布防阈值仍然高过它",
+		`阈值 ${engineThreshold(during, 1000000)} 比例 ${during}`);
+	scope.setArmed(null);
 }
 
 // ── 收尾 ───────────────────────────────────────────────────────────────────

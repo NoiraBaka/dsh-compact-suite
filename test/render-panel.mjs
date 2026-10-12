@@ -188,6 +188,16 @@ const cases = [
 	// 引擎上」，所以它可以是 false —— 这条把它渲染一遍，顺便挡住那句提示里的异常。
 	["自动 · 有引擎没带上本插件那份余量", { ...AUTO, ratioIsBinding: false, headroomConsistent: false }, "notBinding"],
 	["手动 · 比例模式", { ...BASE, auto: false, autoPolicy: null, autoParams: null, retainRatio: 0.16, retainTokens: null, growthTokens: 0, headTokens: 1504, effectiveRatio: 0.8, engineRetention: { retainRatio: 0.16, retainTokens: null }, growthBaselineTokens: null, growthTargetTokens: null, growthClampedByRetention: false }, "retainRatioNote{pct=16}"],
+	// 保留量只管自动触发的压缩。引擎里 `compactNow` 与溢出恢复都把保留预算写死成 0
+	// （`selectCompactableRange(..., 0)`），所以「调了 30% 再按立即压缩，结果只有 2%」
+	// 不是设置没生效。面板必须把这句话说出来，否则它就是在替引擎背一口黑锅。
+	["手动 · 保留量的适用范围", { ...BASE, auto: false, autoPolicy: null, autoParams: null, retainRatio: 0.3, retainTokens: null, growthTokens: 0, headTokens: 1410, effectiveRatio: 0.8, engineRetention: { retainRatio: 0.3, retainTokens: null }, growthBaselineTokens: null, growthTargetTokens: null, growthClampedByRetention: false }, "retainScope"],
+	// 布防中：默认按钮必须换成「已就绪 · 发消息时压」。按完按钮画面和按之前一模一样，
+	// 而那个按钮本来就不做任何立即的事 —— 这是最容易被读成"按了没反应"的状态。
+	["手动 · 已就绪", { ...BASE, auto: false, autoPolicy: null, autoParams: null, retainRatio: 0.3, retainTokens: null, growthTokens: 0, headTokens: 1410, effectiveRatio: 0.8, engineRetention: { retainRatio: 0.3, retainTokens: null }, growthBaselineTokens: null, growthTargetTokens: null, growthClampedByRetention: false, armed: { armedRatio: 0.31, since: "2026-10-12T09:00:00.000Z" } }, "compactArmed"],
+	// 没布防时那个按钮的文字就是「压缩」。「按保留量压 / 立即压缩」这种命名把实现细节
+	// 当成了按钮名 —— 面板上没人看得懂，而且两个并排时读起来像同一件事。
+	["手动 · 默认按钮的文字", { ...BASE, auto: false, autoPolicy: null, autoParams: null, retainRatio: 0.3, retainTokens: null, growthTokens: 0, headTokens: 1410, effectiveRatio: 0.8, engineRetention: { retainRatio: 0.3, retainTokens: null }, growthBaselineTokens: null, growthTargetTokens: null, growthClampedByRetention: false, armed: null }, "compact"],
 	["手动 · 绝对值模式", { ...BASE, auto: false, autoPolicy: null, autoParams: null, retainRatio: null, retainTokens: 5000, growthTokens: 50000, headTokens: 1504, effectiveRatio: 0.072, thresholdTokens: 72000, triggerBoundBy: "growth", compactionFloorTokens: 6504, engineRetention: { retainRatio: null, retainTokens: 5000 }, growthBaselineTokens: 22046, growthTargetTokens: 72046, growthClampedByRetention: false }, "retainTokensNote{kept=5K}"],
 	["手动 · 保留未被引擎接受", { ...BASE, auto: false, autoPolicy: null, autoParams: null, retainRatio: null, retainTokens: 5000, growthTokens: 0, headTokens: 1504, effectiveRatio: 0.8, compactionFloorTokens: 6504, engineRetention: { retainRatio: 0.16, retainTokens: null }, growthBaselineTokens: null, growthTargetTokens: null, growthClampedByRetention: false }, "retentionMismatch"],
 	["窗口与引擎数都未知", { ...BASE, contextWindow: null, thresholdTokens: null, engines: null, ownedEngines: null, auto: false, autoPolicy: null, autoParams: null, retainRatio: null, retainTokens: null, growthTokens: 0, headTokens: null, effectiveRatio: null, compactionFloorTokens: null, engineRetention: null, growthBaselineTokens: null, growthTargetTokens: null, growthClampedByRetention: false }, "windowUnknown"]
@@ -206,6 +216,25 @@ for (const [name, state, expect] of cases) {
 		console.log("  ❌ " + name.padEnd(22) + e.constructor.name + ": " + e.message);
 		console.log("       " + (e.stack.split("\n")[1] ?? "").trim());
 	}
+}
+
+// 「压到底」那个按钮删了：手打 /compact 就是同一件事，面板上再放一个是重复入口。
+// 断言走节点而不是渲染文本 —— `title` 不在 `render()` 的文本里，只用文本的话
+// 「不含 compactFlatTitle」永远为真，等于什么都没测。
+{
+	const tree = draw({ ...BASE, auto: false, autoPolicy: null, autoParams: null, retainRatio: 0.3, retainTokens: null, growthTokens: 0, headTokens: 1410, effectiveRatio: 0.8, engineRetention: { retainRatio: 0.3, retainTokens: null }, growthBaselineTokens: null, growthTargetTokens: null, growthClampedByRetention: false, armed: null });
+	const buttons = [];
+	walk(tree, (node) => {
+		if (node?.type !== "button") return;
+		buttons.push({ text: (node.children ?? []).join(""), title: node.props?.title ?? "" });
+	});
+	const labels = buttons.map((b) => b.text);
+	const titles = buttons.map((b) => b.title).join(" ");
+	const gone = !labels.includes("compactFlat") && titles.includes("compactTitle")
+		&& labels.includes("compact");
+	if (!gone) bad++;
+	console.log("  " + (gone ? "✅" : "❌") + " 面板上只剩一个压缩按钮（「压到底」交给 /compact）　"
+		+ JSON.stringify(labels));
 }
 
 // ── 回调可调用性 ────────────────────────────────────────────────────────────
