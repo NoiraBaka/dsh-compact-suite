@@ -18,14 +18,14 @@ DSH 的上下文快满时，会自动把旧对话压成一小段摘要来腾地�
 
 不用 git，不用 npm，两步。
 
-> **兼容性**：2.9.0 起要求 DSH **0.2.1-rc.1 或更新**。旧版 DSH（0.2.0-rc.2）用 2.8.9。
+> **兼容性**：2.9.2 起要求 DSH **0.2.1-rc.1 或更新**。旧版 DSH（0.2.0-rc.2）用 2.8.9。
 > 差别只有一条：`@deepseek-ai/schemastery` 从 peer 依赖改成了真依赖 —— 0.2.1 里它不再被别的包顺带装进 profile，插件在 `import` 阶段就会失败、整个宿主半不加载（面板显示「无法读取状态」）。
 
 **第 1 步：下载安装包**
 
 点下面的链接，浏览器会把它存到你的下载文件夹：
 
-[dsh-compact-suite-2.9.0.tgz](https://github.com/NoiraBaka/dsh-compact-suite/releases/download/v2.9.0/dsh-compact-suite-2.9.0.tgz)
+[dsh-compact-suite-2.9.2.tgz](https://github.com/NoiraBaka/dsh-compact-suite/releases/download/v2.9.2/dsh-compact-suite-2.9.2.tgz)
 
 **第 2 步：装进 DSH**
 
