@@ -27,6 +27,7 @@
     "test/log-after.mjs",
     "test/quiet-effort.mjs",
     "test/after-repair.mjs",
+    "test/panel-portal.mjs",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
@@ -35,7 +36,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node test/render-panel.mjs && node test/host-policy.mjs && node test/log-after.mjs && node test/quiet-effort.mjs && node test/after-repair.mjs"
+    "test": "node test/render-panel.mjs && node test/host-policy.mjs && node test/log-after.mjs && node test/quiet-effort.mjs && node test/after-repair.mjs && node test/panel-portal.mjs"
   },
   "keywords": [
     "dsh",
