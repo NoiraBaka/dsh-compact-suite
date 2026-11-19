@@ -144,9 +144,9 @@ check("the anchored coordinates are forwarded untouched",
 	shell?.props?.style?.left + "/" + shell?.props?.style?.top);
 
 // \u2500\u2500 dismissal: a click ON the panel must not close it \u2500\u2500\u2500\u2500\u2500\u2500
-let effectFn = null;
-for (const fn of effects) if (typeof fn === "function") effectFn = fn;
-if (effectFn !== null) effectFn();
+// Run every effect the component registered: the dismissal one only attaches
+// listeners, and the placement one bails out without a real trigger node.
+for (const fn of effects) if (typeof fn === "function") fn();
 const onDown = listeners.get("mousedown");
 check("the dismissal effect registered a mousedown listener", typeof onDown === "function");
 
@@ -166,6 +166,31 @@ check("a mousedown inside the portaled panel keeps it open", hookStates[0] === t
 onDown({ target: outsideTarget });
 check("a mousedown outside both subtrees dismisses it", hookStates[0] === false, String(hookStates[0]));
 
+// \u2500\u2500 placement: a tall sheet opens AWAY from the trigger \u2500\u2500\u2500\u2500\u2500\u2500
+// The chip sits near the bottom of the window, so a 420px-wide sheet anchored
+// below it would be clamped upward and cover the chip. The fit effect measures
+// both sides and pins the sheet above the trigger with a capped height.
+globalThis.window.innerHeight = 900;
+hookStates[0] = true;      // reopen: the dismissal test above closed it
+hookStates[1].current = {
+	getBoundingClientRect: () => ({ top: 700, bottom: 740, left: 20, right: 60 })
+};
+for (const fn of effects) if (typeof fn === "function") fn();
+hookIndex = 0;
+effects = [];
+const tree2 = Chip({ t: (k) => k, sessionId: "s" });
+const shell2 = portals.length > 0 ? portals[portals.length - 1].node : null;
+const style2 = shell2?.props?.style ?? {};
+// 900px viewport, trigger at y=700..740, gap 8, margin 12:
+//   room above = 700 - 12 - 8 = 680;  room below = 900 - 740 - 12 - 8 = 140
+//   => open upward, bottom = 900 - 700 + 8 = 208, height capped at 640
+check("the sheet opens upward when the trigger sits low",
+"bottom" in style2 && !("top" in style2), JSON.stringify({ top: style2.top, bottom: style2.bottom }));
+check("the upward offset keeps a gap above the trigger",
+style2.bottom === "208px", String(style2.bottom));
+check("the sheet is capped to the menu maximum, not the trigger's room",
+style2["--dcs-panel-max-height"] === "640px", String(style2["--dcs-panel-max-height"]));
+
 // \u2500\u2500 the inline fallback must survive hosts without react-dom \u2500\u2500\u2500
 check("react-dom is resolved defensively, not assumed",
 	/try \{ ReactDOM = require\("react-dom"\); \} catch/.test(SOURCE));
@@ -174,7 +199,7 @@ check("a host without react-dom falls back to an inline panel",
 
 console.log("");
 if (failures === 0) {
-	console.log("\u5168\u90e8\u901a\u8fc7\uff0814 \u9879\u65ad\u8a00\uff09");
+	console.log("\u5168\u90e8\u901a\u8fc7\uff0817 \u9879\u65ad\u8a00\uff09");
 } else {
 	console.log(failures + " \u9879\u5931\u8d25");
 	process.exit(1);
